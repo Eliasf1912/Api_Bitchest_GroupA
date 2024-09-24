@@ -2,17 +2,17 @@
 
 namespace App\Controller;
 
-use App\Entity\CryptoWallet;
-use App\Entity\Transactions;
 use App\Entity\User;
 use App\Entity\Wallet;
 use App\Repository\CryptoCotationsRepository;
+use App\Entity\CryptoWallet;
 use App\Repository\CryptosRepository;
 use App\Repository\CryptoWalletRepository;
+use App\Repository\TransactionsRepository;
+use App\Entity\Transactions;
 use App\Repository\UsersRepository;
 use App\Repository\WalletRepository;
 use Doctrine\ORM\EntityManagerInterface;
-use Error;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -34,8 +34,9 @@ class UserController extends AbstractController
     private $Cryptos;
     private $Cotations;
     private $CryptoWallet;
+    private $Transactions;
 
-    public function __construct(EntityManagerInterface $entityManager, UsersRepository $User, JWTTokenManagerInterface $jwtManager, UserPasswordHasherInterface $PasswordHasher, SerializerInterface $serializer, WalletRepository $Wallet, CryptosRepository $Cryptos,CryptoCotationsRepository $Cotations,CryptoWalletRepository $CryptoWallet)
+    public function __construct(EntityManagerInterface $entityManager, UsersRepository $User, JWTTokenManagerInterface $jwtManager, UserPasswordHasherInterface $PasswordHasher, SerializerInterface $serializer, WalletRepository $Wallet, CryptosRepository $Cryptos,CryptoCotationsRepository $Cotations,CryptoWalletRepository $CryptoWallet,TransactionsRepository $Transactions)
     {   
         // Fonctionalités et bundle utilisé dans le controller 
         $this->entityManager = $entityManager;
@@ -47,6 +48,7 @@ class UserController extends AbstractController
         $this->Cryptos = $Cryptos;
         $this->Cotations = $Cotations;
         $this->CryptoWallet = $CryptoWallet;
+        $this->Transactions = $Transactions;
     }
 
     #[Route('api/register', name: 'app_users',methods: 'POST')]
@@ -66,7 +68,7 @@ class UserController extends AbstractController
 
         if($this->User->findOneBy(['username' => $UserName])){
             return New JsonResponse([
-                'status' => false,
+                'status' => 'error',
                 'message' => 'This username is already taken.'
             ],Response::HTTP_CONFLICT);
         }
@@ -92,10 +94,8 @@ class UserController extends AbstractController
         
         // On lui renvoie un JSON
         return New JsonResponse([
-            'status' => true,
-            'message'=> 'Your account have been created !',
+            'status' => 'success',
             'Token' => $token,
-            'UserName' => $UserName,
         ]);
         
     }
@@ -107,21 +107,29 @@ class UserController extends AbstractController
         $UserConnected = $this->getUser();
         // On récupére le username de l'utilisateur connecté
         $UserName = $UserConnected->getUserIdentifier();
+        $UserId = $UserConnected->getId();
         // On récupérer la liste de tous les bitcoins et les cotations par la même occasion grâce à la relation entre les deux entités
-        $ListCoins = $this->Cryptos->findAll();
-        // On serialize poujr récupérer les données 
-        $ListCoinsSerialized = $this->serializer->serialize($ListCoins,'json');
- 
+        $ListCoins = $this->Cotations->findAll();
+        // On récupére les transactions
+        $Transactions = $this->Transactions->findAll();
+        // On récupére la balance du user 
+        $WalletUser = $this->Wallet->findOneBy(['id' => $UserId ]);
+        $Balance = $WalletUser->getBalance();
+        // On serialize les données pour récupérer les données 
+        $ListCoinsSerialized = $this->serializer->serialize($ListCoins,'json',['groups' => ['user:cotations']]);
+        $TransactionsSerialized = $this->serializer->serialize($Transactions,'json',['groups' => ['user:transactions']]);
+        
         return New JsonResponse([
             'status' => 'true',
             'message' => 'User Connected, here your information',
             'userConnected' => $UserName,
             'Cryptos' => json_decode($ListCoinsSerialized),
+            'Transactions' => json_decode($TransactionsSerialized),
+            'Balance'=> $Balance,
         ]);
     }
 
-    /*
-    #[Route('api/user/transactions', name: 'app_dashboard',methods: 'POST')]
+    #[Route('api/user/transactions', name: 'app_transaction',methods: 'POST')]
     public function Transactions(Request $request) : JsonResponse
     {
         $Data = json_decode($request->getContent(), true);
@@ -138,21 +146,14 @@ class UserController extends AbstractController
         $UserWallet = $UserConnected->getWallet();
         // On récpère les cryptos possédé par l'utilisateur
         $UserCryptos = $UserWallet->getCryptoWallet();
-
         // On récupère le coins pour pouvoir accéder à ces propriétés 
         $Coin = $this->Cryptos->findOneBy(['name' => $TrasactionsBitcoin]);
-
-        // Derniére variation pour ce prix 
-        $Cotations = $this->Cotations->findBy(['Cryptos' => $Coin]);
-        // On recupère la derniére variations
-        $LastCotation = end($Cotations);
-
         // On récupère la balance du user 
         $BalanceUser = $UserConnected->getWallet()->getBalance();
 
         if($TransactionType == 'purchase'){
             // on calcule l'evolution du prix
-            $TodayPrice = $Coin->getPrice() - (($LastCotation->getCotation() * $Coin->getPrice()) / 100);
+            $TodayPrice = $Coin->getPrice() + (($TrasactionsCotation * $Coin->getPrice()) / 100);
             // On calcule la somme nécessaire pour pouvoir effectuer la transactions
             $AmountPurchase = $TodayPrice *  $TrasactionsAmount;
             // On va comparer avec la balance pour savoir si il peut réaliser cette transactions
@@ -160,24 +161,36 @@ class UserController extends AbstractController
                 return New JsonResponse([
                     'status' => 'false',
                     'message' => 'You can\'t purchase those coins, your balance is too low' 
-                ]);
+                ],Response::HTTP_CONFLICT);
             }
             // On crée une transactions poiur garder des traces et l'avoir dans l'historique
             $NewTransaction = New Transactions;
             $NewTransaction->setType($TransactionType);
             $NewTransaction->setAmount($TrasactionsAmount);
             $NewTransaction->setCrypto($Coin->getName());
-            $NewTransaction->setUnitPrice($TodayPrice);
+            $NewTransaction->setUnitPrice($Coin->getPrice());
             $NewTransaction->setTotal($AmountPurchase);
 
             // On ajoute cette transactions au user connecté
             $NewTransaction->setWallet($UserWallet);
 
-            // On ajoute la crypto au wallet
-            $NewCryptoWallet = New CryptoWallet;
-            $NewCryptoWallet->setCrypto($Coin->getName());
-            $NewCryptoWallet->setAmount($TrasactionsAmount);
-            $UserWallet->addCryptoWallet($NewCryptoWallet);
+            // On regarde si il à déja acheté cette crypto
+            $CheckCrypto = $this->CryptoWallet->findOneBy(['wallet' => $UserWallet,'crypto' => $TrasactionsBitcoin]);
+
+            if($CheckCrypto){
+                // On modifie la crypto si elle existe 
+                $CheckCrypto->setAmount($TrasactionsAmount + $CheckCrypto->getAmount());
+                $CheckCrypto->setCotation($TrasactionsCotation);
+            }else{
+                // On ajoute la crypto au wallet si elle n'existe pas 
+                $NewCryptoWallet = New CryptoWallet;
+                $NewCryptoWallet->setCrypto($Coin->getName());
+                $NewCryptoWallet->setAmount($TrasactionsAmount);
+                $NewCryptoWallet->setCotation($TrasactionsCotation);
+                $NewCryptoWallet->setPrice($Coin->getPrice());
+                $UserWallet->addCryptoWallet($NewCryptoWallet);
+            }
+            
 
             // On retire la somme payé au balance du user
             $UserWallet->setBalance($UserWallet->getBalance() - $AmountPurchase);
@@ -194,15 +207,15 @@ class UserController extends AbstractController
         }
         elseif($TransactionType == 'sale'){
             // on calcule l'evolution du prix
-            $TodayPrice = $Coin->getPrice() - (($LastCotation->getCotation() * $Coin->getPrice()) / 100);
+            $TodayPrice = $Coin->getPrice() + (($TrasactionsCotation * $Coin->getPrice()) / 100);
             // prix de la vente de la cryto
             $AmountSale = $TodayPrice *  $TrasactionsAmount;
             // On regarde  si l'utilisateur posséde la crypto pour la vendre 
-            if(!$this->CryptoWallet->find($Coin->getName())){
+            if(!$this->CryptoWallet->findOneBy(['crypto'=>$Coin->getName()])){
 
                 return New JsonResponse([
                     'status' => 'false',
-                    'message' => 'You can\'t sell this coin, your don\'t posses this coin !' 
+                    'message' => 'You can\'t sell this coin, your don\'t posses this coin !'
                 ]);
             };
 
@@ -216,32 +229,55 @@ class UserController extends AbstractController
 
             // On ajoute cette transactions au user connecté
             $NewTransaction->setWallet($UserWallet);
-
             // On retire la crypto au wallet
-            $NewCryptoWallet = New CryptoWallet;
-            $NewCryptoWallet->setCrypto($Coin->getName());
-            $NewCryptoWallet->setAmount($TrasactionsAmount);
-            $UserWallet->addCryptoWallet($NewCryptoWallet);
-            
+            $CryptoToRemove = $this->CryptoWallet->findOneBy(['wallet' => $UserWallet,'crypto' => $TrasactionsBitcoin]);
+            // Si il vend toutes la crypto, on la supprime sinon ou en retire
+            if($TrasactionsAmount == $CryptoToRemove->getAmount()){
+                $this->entityManager->remove($CryptoToRemove);
+            }else{
+                $CryptoToRemove->setAmount($CryptoToRemove->getAmount() - $TrasactionsAmount);
+            }
             // On ajoute la somme payé au balance du user
             $UserWallet->setBalance($UserWallet->getBalance() + $AmountSale);
+
+            $this->entityManager->persist($NewTransaction);
+            $this->entityManager->persist($UserWallet);
+            $this->entityManager->flush();
+
+            return New JsonResponse([
+                'status' => 'true',
+                'message' => 'Your coin have been sold !' 
+            ]);
         }
 
     }
-    */
 
-    #[Route('api/user', name: 'app_userInfos',methods: 'GET')]
+    #[Route('api/user/Wallet', name: 'app_userWallet',methods: 'GET')]
     public function userInfos(): Response 
     {   
         // On récupère l'utilisateur connécté
         $UserConnected = $this->getUser();
+        $UserId = $UserConnected->getId();
 
-        // On récupére les infos utilisateur via un group grâce au serializer
-        $UserInfos = $this->serializer->serialize($UserConnected,'json',['groups' => 'user:read']);
+        // On récupére la balance du user 
+        $UserWallet = $this->Wallet->findOneBy(['id' => $UserId]);
+        $Balance = $UserWallet->getBalance();
+
+        // On récupère les cryptos possédées 
+        $UserCryptos = $this->CryptoWallet->findBy(['wallet' => $UserWallet]);
+        $UserCryptosSerialized = $this->serializer->serialize($UserCryptos,'json',['groups' => [ 'user:cryptos']]);
+
+        // On récupère l'historique de l'utilisateur
+        $UserTransactions = $this->Transactions->findBy(['wallet' => $UserWallet]);
+        $UserTransactionsSerialized = $this->serializer->serialize($UserTransactions,'json',['groups' => ['user:transactions']]);
 
         // On renvoie un json avec les infos utilisateur
         return New JsonResponse([
-            'userInfos' => json_decode($UserInfos)
+            'status' => 'true',
+            'message' => 'User Connected, here your Wallet',
+            'Balance'=> $Balance,
+            'Cryptos' => json_decode($UserCryptosSerialized),
+            'Transactions' => json_decode($UserTransactionsSerialized)
         ]);
     }
 

@@ -15,32 +15,28 @@ class Cryptos
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
-    #[Groups('user:cryptos')]
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups('user:cryptos')]
+    #[Groups('user:cotations')]
     private ?string $name = null;
 
     #[ORM\Column]
-    #[Groups('user:cryptos')]
+    #[Groups('user:cotations')]
     private ?float $price = null;
 
     #[ORM\Column]
     #[Gedmo\Timestampable(on: "create")]
-    #[Groups('user:cryptos')]
     private ?\DateTimeImmutable $CreatedAt = null;
  
     #[ORM\Column]
     #[Gedmo\Timestampable(on: "update")]
-    #[Groups('user:cryptos')]
     private ?\DateTimeImmutable $UpdatedAt = null;
 
     /**
      * @var Collection<int, CryptoCotations>
      */
     #[ORM\OneToMany(targetEntity: CryptoCotations::class, mappedBy: 'cryptos', orphanRemoval: true, cascade: ['persist','remove'])]
-    #[Groups('user:cryptos')]
     private Collection $Cotations;
 
     public function __construct()

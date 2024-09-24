@@ -6,6 +6,7 @@ use App\Repository\TransactionsRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Gedmo\Mapping\Annotation as Gedmo;
+use Symfony\Component\Serializer\Annotation\Groups;
 
 #[ORM\Entity(repositoryClass: TransactionsRepository::class)]
 class Transactions
@@ -16,23 +17,29 @@ class Transactions
     private ?int $id = null;
 
     #[ORM\Column(length: 255, nullable: true)]
+    #[Groups('user:transactions')]
     private ?string $type = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 0, nullable: true)]
+    #[Groups('user:transactions')]
     private ?string $amount = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 0, nullable: true)]
+    #[Groups('user:transactions')]
     private ?string $unit_price = null;
 
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 0, nullable: true)]
+    #[Groups('user:transactions')]
     private ?string $total = null;
 
     #[ORM\Column]
     #[Gedmo\Timestampable(on: "create")]
+    #[Groups('user:transactions')]
     private ?\DateTimeImmutable $CreatedAt = null;
 
     #[ORM\Column]
     #[Gedmo\Timestampable(on: "update")]
+    #[Groups('user:transactions')]
     private ?\DateTimeImmutable $UpdatedAt = null;
 
     #[ORM\ManyToOne(inversedBy: 'Transactions')]
@@ -40,6 +47,7 @@ class Transactions
     private ?Wallet $wallet = null;
 
     #[ORM\Column(length: 255)]
+    #[Groups('user:transactions')]
     private ?string $Crypto = null;
 
     public function getId(): ?int

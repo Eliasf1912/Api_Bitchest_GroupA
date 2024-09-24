@@ -36,7 +36,7 @@ class Wallet
     /**
      * @var Collection<int, CryptoWallet>
      */
-    #[ORM\OneToMany(targetEntity: CryptoWallet::class, mappedBy: 'wallet')]
+    #[ORM\OneToMany(targetEntity: CryptoWallet::class, mappedBy: 'wallet',cascade: ['persist'])]
     private Collection $CryptoWallet;
 
     public function __construct()
@@ -62,12 +62,12 @@ class Wallet
         return $this;
     }
 
-    public function getUpdateAt(): ?\DateTimeImmutable
+    public function getUpdatedAt(): ?\DateTimeImmutable
     {
         return $this->UpdatedAt;
     }
 
-    public function setUpdateAt(\DateTimeImmutable $UpdatedAt): static
+    public function setUpdatedAt(\DateTimeImmutable $UpdatedAt): static
     {
         $this->UpdatedAt = $UpdatedAt;
 
@@ -145,5 +145,6 @@ class Wallet
 
         return $this;
     }
+
 
 }
