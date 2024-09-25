@@ -100,7 +100,7 @@ class UserController extends AbstractController
         
     }
 
-    #[Route('api/user/dashboard', name: 'app_dashboard',methods: 'GET')]
+    #[Route('api/user/dashboard', name: 'app_dashboarde',methods: 'GET')]
     public function UserDashboard() : JsonResponse
     {
         // On récupére l'utilisateur connecté
